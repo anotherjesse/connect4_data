@@ -47,17 +47,11 @@ impl Game {
                         result.push(8);
                         self.games += 1;
                         self.wins += 1;
-                        if self.games % 1000 == 0 {
-                            eprintln!("{} {} {}", self.games, self.wins, self.ties);
-                        }
                     }
                 } else if self.is_full() {
                     result.push(9);
                     self.games += 1;
                     self.ties += 1;
-                    if self.games % 1000 == 0 {
-                        eprintln!("{} {} {}", self.games, self.wins, self.ties);
-                    }
                 } else {
                     let sub_result = self.play()?;
                     result.extend(sub_result);
@@ -68,8 +62,6 @@ impl Game {
 
         Ok(result)
     }
-
- 
 
     fn can_play_column(&self, column: i32) -> bool {
         for r in 0..ROWS {
@@ -141,12 +133,7 @@ impl Game {
 
 
 #[pymodule]
-fn connect_four(_py: Python, m: &PyModule) -> PyResult<()> {
+fn connect4(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Game>()?;
     Ok(())
 }
-
-// fn main() {
-//     let mut game = Game::new();
-//     game.play();
-// }
