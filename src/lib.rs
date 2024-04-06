@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use rand::seq::SliceRandom;
+use rand::Rng;
 
 const ROWS: usize = 6;
 const COLUMNS: usize = 7;
@@ -8,64 +8,43 @@ const COLUMNS: usize = 7;
 struct Game {
     board: [[i32; COLUMNS]; ROWS],
     turn: i32,
-    moves: String,
-    games: i32,
-    wins: i32,
-    ties: i32,
+    moves: Vec<i32>,
 }
 
 #[pymethods]
 impl Game {
     #[new]
-    fn new() -> Game {
+    fn new() -> Self {
         Game {
             board: [[0; COLUMNS]; ROWS],
             turn: 1,
-            moves: String::new(),
-            games: 0,
-            wins: 0,
-            ties: 0,
+            moves: Vec::new(),
         }
     }
 
     fn play(&mut self) -> PyResult<Vec<i32>> {
-        let mut rng = rand::thread_rng();
-        let mut columns: Vec<i32> = (1..=COLUMNS as i32).collect();
+        self.moves.clear();
+        self.turn = 1;
+        self.board = [[0; COLUMNS]; ROWS];
 
-        if self.moves.len() > 6 {
-            columns.shuffle(&mut rng);
-            columns.truncate(2);
-        }
-
-        let mut result = Vec::new();
-
-        for &c in &columns {
-            if self.can_play_column(c) {
-                self.make_move(c);
+        while !self.is_full() {
+            let column = rand::thread_rng().gen_range(1..=COLUMNS as i32);
+            if self.can_play_column(column) {
+                self.make_move(column);
                 if self.check_win() {
-                    if self.wins < self.ties {
-                        result.push(8);
-                        self.games += 1;
-                        self.wins += 1;
-                    }
-                } else if self.is_full() {
-                    result.push(9);
-                    self.games += 1;
-                    self.ties += 1;
-                } else {
-                    let sub_result = self.play()?;
-                    result.extend(sub_result);
+                    self.moves.push(8); // win
+                    return Ok(self.moves.clone());
                 }
-                self.undo_move(c);
             }
         }
 
-        Ok(result)
+        self.moves.push(9); // Tie / Board full
+        Ok(self.moves.clone())
     }
 
     fn can_play_column(&self, column: i32) -> bool {
         for r in 0..ROWS {
-            if self.board[r][(column - 1) as usize] == 0 {
+            if self.board[r][column as usize - 1] == 0 {
                 return true;
             }
         }
@@ -74,24 +53,13 @@ impl Game {
 
     fn make_move(&mut self, column: i32) {
         for r in (0..ROWS).rev() {
-            if self.board[r][(column - 1) as usize] == 0 {
-                self.board[r][(column - 1) as usize] = self.turn;
-                self.moves.push_str(&column.to_string());
+            if self.board[r][column as usize - 1] == 0 {
+                self.board[r][column as usize - 1] = self.turn;
+                self.moves.push(column);
                 break;
             }
         }
         self.turn = 3 - self.turn; // Switch turns after making a move
-    }
-
-    fn undo_move(&mut self, column: i32) {
-        for r in 0..ROWS {
-            if self.board[r][(column - 1) as usize] != 0 {
-                self.board[r][(column - 1) as usize] = 0;
-                self.moves.pop();
-                break;
-            }
-        }
-        // No need to switch turns back here as it's handled after each make_move call
     }
 
     fn check_win(&self) -> bool {
@@ -101,24 +69,42 @@ impl Game {
                 if player == 0 {
                     continue;
                 }
-
+    
                 // Check right
-                if c + 3 < COLUMNS && (1..=3).all(|i| player == self.board[r][c + i]) {
+                if c + 3 < COLUMNS
+                    && player == self.board[r][c + 1]
+                    && player == self.board[r][c + 2]
+                    && player == self.board[r][c + 3]
+                {
                     return true;
                 }
-
-                // Check downa
-                if r + 3 < ROWS && (1..=3).all(|i| player == self.board[r + i][c]) {
+    
+                // Check down
+                if r + 3 < ROWS
+                    && player == self.board[r + 1][c]
+                    && player == self.board[r + 2][c]
+                    && player == self.board[r + 3][c]
+                {
                     return true;
                 }
-
+    
                 // Check down-right
-                if r + 3 < ROWS && c + 3 < COLUMNS && (1..=3).all(|i| player == self.board[r + i][c + i]) {
+                if r + 3 < ROWS
+                    && c + 3 < COLUMNS
+                    && player == self.board[r + 1][c + 1]
+                    && player == self.board[r + 2][c + 2]
+                    && player == self.board[r + 3][c + 3]
+                {
                     return true;
                 }
-
+    
                 // Check down-left
-                if r + 3 < ROWS && c >= 3 && (1..=3).all(|i| player == self.board[r + i][c - i]) {
+                if r + 3 < ROWS
+                    && c >= 3
+                    && player == self.board[r + 1][c - 1]
+                    && player == self.board[r + 2][c - 2]
+                    && player == self.board[r + 3][c - 3]
+                {
                     return true;
                 }
             }
@@ -127,13 +113,43 @@ impl Game {
     }
 
     fn is_full(&self) -> bool {
-        !(1..=COLUMNS as i32).any(|c| self.can_play_column(c))
+        for c in 0..COLUMNS {
+            if self.can_play_column(c as i32 + 1) {
+                return false;
+            }
+        }
+        true
     }
 }
 
+#[pyclass]
+struct GameIterator {
+    game: Game,
+}
+
+#[pymethods]
+impl GameIterator {
+    #[new]
+    fn new() -> Self {
+        GameIterator { game: Game::new() }
+    }
+
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Vec<i32>> {
+        let moves = slf.game.play().ok()?;
+        if moves.is_empty() {
+            None
+        } else {
+            Some(moves)
+        }
+    }
+}
 
 #[pymodule]
 fn connect4(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<Game>()?;
+    m.add_class::<GameIterator>()?;
     Ok(())
 }
