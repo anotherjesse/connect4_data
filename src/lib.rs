@@ -4,152 +4,96 @@ use rand::Rng;
 const ROWS: usize = 6;
 const COLUMNS: usize = 7;
 
-#[pyclass]
-struct Game {
-    board: [[i32; COLUMNS]; ROWS],
-    turn: i32,
-    moves: Vec<i32>,
-}
-
-#[pymethods]
-impl Game {
-    #[new]
-    fn new() -> Self {
-        Game {
-            board: [[0; COLUMNS]; ROWS],
-            turn: 1,
-            moves: Vec::new(),
-        }
-    }
-
-    fn play(&mut self) -> PyResult<Vec<i32>> {
-        self.moves.clear();
-        self.turn = 1;
-        self.board = [[0; COLUMNS]; ROWS];
-
-        while !self.is_full() {
-            let column = rand::thread_rng().gen_range(1..=COLUMNS as i32);
-            if self.can_play_column(column) {
-                self.make_move(column);
-                if self.check_win() {
-                    self.moves.push(8); // win
-                    return Ok(self.moves.clone());
-                }
-            }
-        }
-
-        self.moves.push(9); // Tie / Board full
-        Ok(self.moves.clone())
-    }
-
-    fn can_play_column(&self, column: i32) -> bool {
-        for r in 0..ROWS {
-            if self.board[r][column as usize - 1] == 0 {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn make_move(&mut self, column: i32) {
-        for r in (0..ROWS).rev() {
-            if self.board[r][column as usize - 1] == 0 {
-                self.board[r][column as usize - 1] = self.turn;
-                self.moves.push(column);
-                break;
-            }
-        }
-        self.turn = 3 - self.turn; // Switch turns after making a move
-    }
-
-    fn check_win(&self) -> bool {
-        for r in 0..ROWS {
-            for c in 0..COLUMNS {
-                let player = self.board[r][c];
-                if player == 0 {
-                    continue;
-                }
-    
-                // Check right
-                if c + 3 < COLUMNS
-                    && player == self.board[r][c + 1]
-                    && player == self.board[r][c + 2]
-                    && player == self.board[r][c + 3]
-                {
-                    return true;
-                }
-    
-                // Check down
-                if r + 3 < ROWS
-                    && player == self.board[r + 1][c]
-                    && player == self.board[r + 2][c]
-                    && player == self.board[r + 3][c]
-                {
-                    return true;
-                }
-    
-                // Check down-right
-                if r + 3 < ROWS
-                    && c + 3 < COLUMNS
-                    && player == self.board[r + 1][c + 1]
-                    && player == self.board[r + 2][c + 2]
-                    && player == self.board[r + 3][c + 3]
-                {
-                    return true;
-                }
-    
-                // Check down-left
-                if r + 3 < ROWS
-                    && c >= 3
-                    && player == self.board[r + 1][c - 1]
-                    && player == self.board[r + 2][c - 2]
-                    && player == self.board[r + 3][c - 3]
-                {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    fn is_full(&self) -> bool {
-        for c in 0..COLUMNS {
-            if self.can_play_column(c as i32 + 1) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
-#[pyclass]
-struct GameIterator {
-    game: Game,
-}
-
-#[pymethods]
-impl GameIterator {
-    #[new]
-    fn new() -> Self {
-        GameIterator { game: Game::new() }
-    }
-
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Vec<i32>> {
-        let moves = slf.game.play().ok()?;
-        if moves.is_empty() {
-            None
-        } else {
-            Some(moves)
-        }
-    }
-}
-
 #[pymodule]
 fn connect4(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<GameIterator>()?;
+    m.add_function(wrap_pyfunction!(play_game, m)?)?;
     Ok(())
 }
+
+#[pyfunction]
+fn play_game(desired_length: usize) -> PyResult<Vec<i32>> {
+    let mut board = [[0; COLUMNS]; ROWS];
+    let mut turn = 1;
+    let mut moves = Vec::new();
+
+    while !is_board_full(&board) && moves.len() < desired_length {
+        let column = rand::thread_rng().gen_range(1..=COLUMNS as i32);
+        // check if the column is full
+        if board[0][column as usize - 1] != 0 {
+            continue;
+        }
+        moves.push(column);
+        if make_move(&mut board, column, turn) {
+            moves.push(8); // Win
+            break;
+        }
+        turn = 3 - turn; // Switch turns
+    }
+
+    // if the game is not over (check if last move is 8)
+    if moves.len() < desired_length && moves[moves.len() - 1] != 8 {
+        moves.push(9); // Tie or end of game
+    }
+
+    // Pad the moves vector with zeros if it's shorter than the desired length
+    while moves.len() < desired_length {
+        moves.push(0);
+    }
+
+    Ok(moves)
+}
+fn make_move(board: &mut [[i32; COLUMNS]; ROWS], column: i32, player: i32) -> bool {
+    for row in (0..ROWS).rev() {
+        if board[row][column as usize - 1] == 0 {
+            board[row][column as usize - 1] = player;
+            return check_win(board, row, column as usize - 1, player);
+        }
+    }
+    false // Column is full
+}
+
+fn check_win(board: &[[i32; COLUMNS]; ROWS], row: usize, col: usize, player: i32) -> bool {
+    // Check horizontal
+    let count = count_consecutive(board, row, col, 0, 1, player) + count_consecutive(board, row, col, 0, -1, player) - 1;
+    if count >= 4 { return true; }
+
+    // Check vertical
+    let count = count_consecutive(board, row, col, 1, 0, player);
+    if count >= 4 { return true; }
+
+    // Check diagonals
+    let count = count_consecutive(board, row, col, 1, 1, player) + count_consecutive(board, row, col, -1, -1, player) - 1;
+    if count >= 4 { return true; }
+    let count = count_consecutive(board, row, col, 1, -1, player) + count_consecutive(board, row, col, -1, 1, player) - 1;
+    if count >= 4 { return true; }
+
+    false 
+}
+
+fn count_consecutive(board: &[[i32; COLUMNS]; ROWS], row: usize, col: usize, dr: isize, dc: isize, player: i32) -> usize {
+    let mut r = row as isize;
+    let mut c = col as isize;
+    let mut count = 0;
+
+
+    while r >= 0 && r < ROWS as isize && c >= 0 && c < COLUMNS as isize && board[r as usize][c as usize] == player {
+        count += 1;
+        if r == 0 && dr == -1 {
+            break;
+        }
+        r += dr;
+        if c == 0 && dc == -1 {
+            break;
+        }
+        c += dc;
+    }
+
+    count
+}
+
+
+fn is_board_full(board: &[[i32; COLUMNS]; ROWS]) -> bool {
+    board[0].iter().all(|&cell| cell != 0) // Check if the top row is full
+}
+
+

@@ -21,12 +21,7 @@ To generate training data for connect 4, I thought I'd try generating using a ru
     python
 
     >>> import connect4
-    >>> g = connect4.GameIterator()
-    >>> next(g)
-    [4, 2, 2, 6, 5, 6, 7, 3, 2, 4, 4, 2, 6, 3, 3, 4, 4, 3, 3, 3, 5, 7, 5, 8]
-    >>> next(g)
-    [7, 5, 6, 3, 6, 4, 3, 2, 8]
-    >>> next(g)
-    [1, 2, 7, 2, 1, 5, 3, 1, 5, 4, 4, 3, 1, 1, 1, 6, 5, 5, 5, 3, 7, 3, 6, 8]
-    >>> next(g)
-    [5, 4, 4, 4, 4, 4, 7, 1, 1, 5, 6, 4, 5, 1, 7, 2, 2, 1, 7, 1, 3, 7, 7, 5, 3, 8]
+    >>> connect4.play_game(20)
+    [1, 6, 6, 7, 1, 1, 4, 3, 2, 5, 4, 3, 1, 3, 2, 6, 6, 7, 2, 6]
+    >>> connect4.play_game(20)
+    [2, 5, 4, 1, 2, 2, 4, 1, 6, 1, 1, 6, 7, 7, 3, 4, 5, 4, 3, 8]
