@@ -1,5 +1,5 @@
 use rand::seq::SliceRandom;
-use std::fmt;
+
 
 const ROWS: usize = 6;
 const COLUMNS: usize = 7;
