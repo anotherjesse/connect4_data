@@ -3,6 +3,8 @@ use rand::Rng;
 
 const ROWS: usize = 6;
 const COLUMNS: usize = 7;
+const WIN: i32 = (ROWS * COLUMNS + 1) as i32;
+const TIE: i32 = (ROWS * COLUMNS + 2) as i32;
 
 #[pymodule]
 fn connect4(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -22,17 +24,18 @@ fn play_game(desired_length: usize) -> PyResult<Vec<i32>> {
         if board[0][column as usize - 1] != 0 {
             continue;
         }
-        moves.push(column);
-        if make_move(&mut board, column, turn) {
-            moves.push(8); // Win
+        let (win, row) = make_move(&mut board, column, turn);
+        moves.push(column + row * COLUMNS as i32);
+        if moves.len() < desired_length && win {
+            moves.push(WIN);
             break;
         }
         turn = 3 - turn; // Switch turns
     }
 
     // if the game is not over (check if last move is 8)
-    if moves.len() < desired_length && moves[moves.len() - 1] != 8 {
-        moves.push(9); // Tie or end of game
+    if moves.len() < desired_length && moves[moves.len() - 1] != WIN {
+        moves.push(TIE);
     }
 
     // Pad the moves vector with zeros if it's shorter than the desired length
@@ -42,14 +45,14 @@ fn play_game(desired_length: usize) -> PyResult<Vec<i32>> {
 
     Ok(moves)
 }
-fn make_move(board: &mut [[i32; COLUMNS]; ROWS], column: i32, player: i32) -> bool {
+fn make_move(board: &mut [[i32; COLUMNS]; ROWS], column: i32, player: i32) -> (bool, i32) {
     for row in (0..ROWS).rev() {
         if board[row][column as usize - 1] == 0 {
             board[row][column as usize - 1] = player;
-            return check_win(board, row, column as usize - 1, player);
+            return (check_win(board, row, column as usize - 1, player), row as i32);
         }
     }
-    false // Column is full
+    (false, 0)
 }
 
 fn check_win(board: &[[i32; COLUMNS]; ROWS], row: usize, col: usize, player: i32) -> bool {
